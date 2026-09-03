@@ -326,9 +326,13 @@ function getLocalTimeString() {
   return formatDateTimeInTimeZone(new Date(), TIME_ZONE);
 }
 
-function shouldWake(lastUserTime) {
+function shouldWake(lastUserTime, lastSelfActionTime) {
   const now = getNow();
-  const diffMinutes = Math.floor((now - new Date(lastUserTime)) / 1000 / 60);
+  let baseline = new Date(lastUserTime);
+  if (lastSelfActionTime && new Date(lastSelfActionTime) > baseline) {
+    baseline = new Date(lastSelfActionTime);
+  }
+  const diffMinutes = Math.floor((now - baseline) / 1000 / 60);
   return diffMinutes >= getWakeAfterMinutes(now);
 }
 
@@ -339,6 +343,20 @@ function parseTimelineTimestamp(value) {
   const [, yyyy, , month, day, hour, minute] = match;
   return zonedWallTimeToDate({ year: yyyy, month, day, hour, minute }, TIME_ZONE);
 }
+function getLastSelfActionTime(messages) {
+  const reversed = [...messages].reverse();
+  for (const msg of reversed) {
+    if (msg.role === "assistant") {
+      const content = normalizeContentToText(msg.content);
+      if (content.includes("刚刚给用户发了") || content.includes("自动唤醒")) {
+        const parsed = parseTimelineTimestamp(content);
+        if (parsed) return parsed;
+      }
+    }
+  }
+  return null;
+}
+
 
 function getLastUserTime(messages) {
   const reversed = [...messages].reverse();
@@ -408,6 +426,7 @@ async function runWakeUp() {
   if (!messages) return;
 
   const lastUserTime = getLastUserTime(messages);
+  const lastSelfActionTime = getLastSelfActionTime(messages);
   if (!lastUserTime) {
     console.log("未找到用户时间");
     return;
@@ -416,10 +435,10 @@ async function runWakeUp() {
   const now = new Date();
   const diffMinutes = Math.floor((now - lastUserTime) / 1000 / 60);
 
-  if (!shouldWake(lastUserTime)) {
-    console.log("\n暂不需要唤醒\n");
-    return;
-  }
+ if (!shouldWake(lastUserTime, lastSelfActionTime)) {
+  console.log("\n暂不需要唤醒\n");
+  return;
+}
 
   const weatherContext = await fetchWeatherContext();
   const wakePrompt = buildWakePrompt(getChinaTimeString(), diffMinutes, weatherContext);
