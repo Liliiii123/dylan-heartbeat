@@ -574,6 +574,8 @@ ${historyText}`
       .replace(/^标题[：:]\s*/gm, "")
       .replace(/^正文[：:]\s*/gm, "");
 
+    barkText = barkText.replace(/（\s*\d{4}-\d{2}-\d{2}.*?(自动唤醒|刚刚给用户发了).*?）/g, "").trim();
+
     // 按行处理
     const lines = barkText.split("\n").filter(line => line.trim() !== "");
 
